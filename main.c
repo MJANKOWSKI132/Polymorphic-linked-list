@@ -15,9 +15,9 @@ struct node{
 
 // Function prototypes
 void printLinkedList(struct node* head);
-void freeLinkedList(struct node* head);
-void addToEnd(struct node** head, void* value, enum Type type);
-void addToStart(struct node** head, void* value, enum Type type);
+void freeLinkedList(struct node* head, void (*freeFunction)(void*));
+void addToEnd(struct node** head, struct node* insertNode);
+void addToStart(struct node** head, struct node* insertNode);
 struct node* createNode(void* value, enum Type type);
 void printNode(struct node* node);
 int getLength(struct node* head);
@@ -25,25 +25,20 @@ struct node* getHead(struct node** head, bool remove);
 struct node* getFoot(struct node** head, bool remove);
 struct node* get(struct node** head, int index, bool remove);
 bool isEmpty(struct node* head);
-struct node* filter(struct node* head, enum Type type);
 bool isHomogeneous(struct node* head);
-int iterativeSearchFirstInstance(struct node* head, void* value, enum Type type);
-int recursiveSearchFirstInstanceUtility(struct node* head, struct node* searchNode, int progressed);
-int recursiveSearchFirstInstance(struct node* head, void* value, enum Type type);
-int* iterativeSearchAllInstances(struct node* head, void* value, enum Type type, int* size);
-int* recursiveSearchAllInstancesUtility(struct node* head, struct node* searchNode, int progressed, int* indices, int* size);
-int* recursiveSearchAllInstances(struct node* head, void* value, enum Type type, int* size);
+struct node* findFirstIter(struct node* head, bool (*cmp)(void*));
+struct node* findFirstRec(struct node* head, bool (*cmp)(void*));
+struct node* findAllIter(struct node* head, bool (*cmp)(void*));
+struct node* findAllRecUtility(struct node* head, bool (*cmp)(void*), struct node* newHead);
+struct node* findAllRec(struct node* head, bool(*cmp)(void*));
 bool isEqual(struct node* firstNode, struct node* secondNode);
 void reverse(struct node** head);
 struct node* map(struct node* head, void* (*f)(void*));
+void forEach(struct node* head, void (*f)(void*));
+struct node* filter(struct node* head, bool (*predicate)(void*));
 
-void* doubleInt(void* x);
-
-void* TripleInt(void* x){
-    int xInt;
-    memcpy(&xInt, &x, sizeof(int));
-    void* ret = (void*)(xInt * 3);
-    return ret;
+bool isInteger(struct node* node){
+    return node -> type == INTEGER;
 }
 
 void main(){
@@ -51,39 +46,12 @@ void main(){
     head = NULL;
     int numbers[5] = {1, 2, 3, 4, 5};
     for(int i = 0; i < 5; i ++){
-        addToEnd(&head, &numbers[i], INTEGER);
+        struct node* insertNode = createNode(&numbers[i], INTEGER);
+        addToEnd(&head, insertNode);
     }
-    reverse(&head);
-    map(head, TripleInt);
-    printLinkedList(head);
-    return;
-    float x1 = 3.2;
-    char x2 = 'a';
-    char *x3 = "abc";
-    addToEnd(&head, &x1, FLOAT);
-    addToEnd(&head, &x2, CHAR);
-    addToEnd(&head, &x3, STRING);
-    for(int i = 0; i < 5; i ++){
-        addToStart(&head, &numbers[i], INTEGER);
-    }
-    printLinkedList(head);
-    printf("\n");
-    printNode(get(&head, getLength(head) - 1, true));
-    printf("\n");
-    printLinkedList(head);
-    printf("\n");
-    printLinkedList(filter(head, INTEGER));
-    printf("\n");
-    printf("%d %d\n", isHomogeneous(filter(head, INTEGER)), isHomogeneous(head));
-    printf("\n");
-    int x = 21;
-    int size;
-    int* indices = recursiveSearchAllInstances(head, &x, INTEGER, &size);
-    for(int i = 0; i < size; i++){
-        printf("%d\n", indices[i]);
-    }
-    //printf("%d\n", recursiveSearchFirstInstance(head, &x, INTEGER));
-    freeLinkedList(head);
+    struct node* filteredHead = filter(head, isInteger);
+    forEach(filteredHead, printNode);
+    freeLinkedList(head, free);
 }
 
 // A function to print each node
@@ -118,14 +86,14 @@ void printLinkedList(struct node* head){
 }
 
 // A function to free the entire linked list
-void freeLinkedList(struct node* head){
+void freeLinkedList(struct node* head, void (*freeFunction)(void*)){
     struct node* currNode = head;
     struct node* prevNode = NULL;
     // Iterate over each node freeing it, ensuring that you store the next node before freeing the current
     while(currNode){
         prevNode = currNode;
         currNode = currNode -> next;
-        free(prevNode);
+        freeFunction(prevNode);
     }
 }
 
@@ -155,8 +123,7 @@ struct node* createNode(void* value, enum Type type){
 }
 
 // A function to add to the end (foot) of the linked list
-void addToEnd(struct node** head, void* value, enum Type type){
-    struct node* insertNode = createNode(value, type);
+void addToEnd(struct node** head, struct node* insertNode){
     if(!insertNode) return;
     if(!(*head)){
         // If the linked list is empty make the node being inserted the head
@@ -172,8 +139,7 @@ void addToEnd(struct node** head, void* value, enum Type type){
 }
 
 // A function to add to the start (head) of the linked list
-void addToStart(struct node** head, void* value, enum Type type){
-    struct node* insertNode = createNode(value, type);
+void addToStart(struct node** head, struct node* insertNode){
     if(!insertNode) return;
     if(!(*head)){
         // If the linked list is empty make the node being inserted the head
@@ -253,21 +219,6 @@ struct node* get(struct node** head, int index, bool remove){
     return NULL;
 }
 
-// A function to filter a linked list based on a specified type, the resulting linked list will be homogeneous on type
-struct node* filter(struct node* head, enum Type type){
-    struct node* newHead = (struct node*)malloc(sizeof(struct node));
-    newHead = NULL;
-    struct node* currNode = head;
-    while(currNode){
-        if(currNode -> type == type){
-            // Add all matching nodes to a new linked list using the addToEnd function
-            addToEnd(&newHead, &(currNode -> value), currNode -> type);
-        }
-        currNode = currNode -> next;
-    }
-    return newHead;
-}
-
 // A function to determine if a linked list is homogeneous on type
 bool isHomogeneous(struct node* head){
     struct node* currNode = head;
@@ -327,79 +278,48 @@ bool isEqual(struct node* firstNode, struct node* secondNode){
     return false;
 }
 
-// A function that utilises linear search in an iterative manner to detect the index of the first instance of a value in a linked list
-int iterativeSearchFirstInstance(struct node* head, void* value, enum Type type){
+struct node* findFirstIter(struct node* head, bool (*cmp)(void*)){
     struct node* currNode = head;
-    struct node* searchNode = createNode(value, type);
-    int progressed = 0;
     while(currNode){
-        if(isEqual(currNode, searchNode)){
-            free(searchNode);
-            return progressed;
+        if(cmp(currNode)){
+            return currNode;
         }
-        progressed++;
         currNode = currNode -> next;
     }
-    free(searchNode);
-    return -1;
+    return NULL;
 }
 
-// Recurisve utility function for recursiveSearchFirstInstance
-int recursiveSearchFirstInstanceUtility(struct node* head, struct node* searchNode, int progressed){
-    if(head == NULL) return -1;
-    if(isEqual(head, searchNode)) return progressed;
-    return recursiveSearchFirstInstanceUtility(head -> next, searchNode, progressed + 1);
+struct node* findFirstRec(struct node* head, bool (*cmp)(void*)){
+    if(head == NULL) return NULL;
+    if(cmp(head)) return head;
+    return findFirstRec(head -> next, cmp);
 }
 
-// A function that utilises linear search in a recursive manner to detect the index of the first instance of a value in a linked list
-int recursiveSearchFirstInstance(struct node* head, void* value, enum Type type){
-    struct node* searchNode = createNode(value, type);
-    return recursiveSearchFirstInstanceUtility(head, searchNode, 0);
-}
-
-// A function that utilises linear search in an iterative manner to detect all indices of instances of a value in a linked list
-int* iterativeSearchAllInstances(struct node* head, void* value, enum Type type, int* size){
+struct node* findAllIter(struct node* head, bool (*cmp)(void*)){
     struct node* currNode = head;
-    struct node* searchNode = createNode(value, type);
-    int progressed = 0;
-    *size = 0;
-    int* indices = NULL;
+    struct node* newHead = (struct node*)malloc(sizeof(struct node));
+    newHead = NULL;
     while(currNode){
-        if(isEqual(currNode, searchNode)){
-            if(indices){
-                indices = realloc(indices, (++(*size)) * sizeof(int));
-            }else{
-                indices = (int*)malloc((++(*size)) * sizeof(int));
-            }
-            indices[*size - 1] = progressed;
+        if(cmp(currNode)){
+            addToEnd(&newHead, currNode);
         }
-        progressed++;
         currNode = currNode -> next;
     }
-    return indices;
+    return newHead;
 }
 
-// Recursive utility function for recursiveSearchAllInstances
-int* recursiveSearchAllInstancesUtility(struct node* head, struct node* searchNode, int progressed, int* indices, int* size){
-    if(head == NULL) return indices;
-    if(isEqual(head, searchNode)){
-        if(indices){
-            indices = realloc(indices, (++(*size)) * sizeof(int));
-        }else{
-            indices = (int*)malloc((++(*size)) * sizeof(int));
-        }
-        indices[*size - 1] = progressed;
+struct node* findAllRecUtility(struct node* head, bool (*cmp)(void*), struct node* newHead){
+    if(head == NULL) return newHead;
+    if(cmp(head)){
+        addToEnd(&newHead, head);
     }
-    return recursiveSearchAllInstancesUtility(head -> next, searchNode, progressed + 1, indices, size);
+    return findAllRecUtility(head -> next, cmp, newHead);
 }
 
-// A function that utilises linear search in a recursive manner to detect all indices of instances of a value in a linked list
-int* recursiveSearchAllInstances(struct node* head, void* value, enum Type type, int* size){
-    struct node* searchNode = createNode(value, type);
-    int* indices = NULL;
-    *size = 0;
-    int progresed = 0;
-    return recursiveSearchAllInstancesUtility(head, searchNode, progresed, indices, size);
+struct node* findAllRec(struct node* head, bool (*cmp)(void*)){
+    struct node* newHead = (struct node*)malloc(sizeof(struct node));
+    newHead = NULL;
+    return findAllRecUtility(head, cmp, newHead);
 }
 
 // A function to reverse a linked list
@@ -430,7 +350,7 @@ struct node* map(struct node* head, void* (*f)(void*)){
 void forEach(struct node* head, void (*f)(void*)){
     struct node* currNode = head;
     while(currNode){
-        f(currNode -> value);
+        f(currNode);
         currNode = currNode -> next;
     }
 }
@@ -442,7 +362,9 @@ struct node* filter(struct node* head, bool (*predicate)(void*)){
     newHead = NULL;
     while(currNode){
         if(predicate(currNode)){
-            addToEnd(newHead);
+            printf("here 1");
+            addToEnd(&newHead, currNode);
+            printf("here 2");
         }
         currNode = currNode -> next;
     }
